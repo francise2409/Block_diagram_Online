@@ -184,6 +184,9 @@ text{user-select:none;}
     <button class="tbtn primary" onclick="exportHTML()">💾 HTML</button>
   </div>
   <div class="tb-group">
+    <button class="tbtn primary" onclick="saveToLocalStorage()" title="Lưu cục bộ browser (Ctrl+S)">💾 Lưu Cục Bộ</button>
+  </div>
+  <div class="tb-group">
     <button class="tbtn success" onclick="showCloudSaveModal()" title="Lưu lên Cloud (Ctrl+Shift+S)">☁️ Lưu Cloud</button>
     <button class="tbtn teal" onclick="showCloudLoadModal()" title="Tải từ Cloud">☁️ Tải</button>
   </div>
@@ -284,8 +287,65 @@ text{user-select:none;}
 <script>
 // ============ GAS BACKEND CONFIG ============
 const GAS_DEPLOYMENT_URL = 'https://script.google.com/macros/s/AKfycbw-6FDmFAKXLfT8Tb9eV5mhgzZwBpE0j_84eUUX4YrlzfTtNc8TEH0NrWJoVv2eOyQIDg/exec';
+const LOCALSTORAGE_KEY = 'blockDiagramState';
 let cloudFileId = null;
 let cloudFileName = null;
+
+// ============ LOCALSTORAGE FUNCTIONS ============
+function saveToLocalStorage() {
+  try {
+    const data = {
+      meta: S.meta,
+      nodes: S.nodes,
+      edges: S.edges,
+      boundaries: S.boundaries,
+      timestamp: new Date().toISOString()
+    };
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
+    toast('✅ Đã lưu cục bộ (LocalStorage)');
+    const statusEl = document.getElementById('cloudStatus');
+    statusEl.textContent = '💾 Lưu cục bộ: ' + new Date().toLocaleTimeString('vi-VN');
+  } catch(err) {
+    toast('❌ Lỗi lưu: ' + err.message);
+  }
+}
+
+function loadFromLocalStorage() {
+  try {
+    const saved = localStorage.getItem(LOCALSTORAGE_KEY);
+    if (!saved) return false;
+
+    const data = JSON.parse(saved);
+    S.meta = data.meta || S.meta;
+    S.nodes = data.nodes || [];
+    S.edges = data.edges || [];
+    S.boundaries = data.boundaries || [];
+
+    sel.clear();
+    selEdge = null;
+    undoStack = [];
+    redoStack = [];
+
+    render();
+    renderPanel();
+    zoomFit();
+
+    const statusEl = document.getElementById('cloudStatus');
+    statusEl.textContent = '✓ Đã load: ' + new Date(data.timestamp).toLocaleTimeString('vi-VN');
+
+    return true;
+  } catch(err) {
+    console.error('Error loading from localStorage:', err);
+    return false;
+  }
+}
+
+function clearLocalStorage() {
+  if(confirm('Xóa tất cả dữ liệu cục bộ? Không thể hoàn tác!')) {
+    localStorage.removeItem(LOCALSTORAGE_KEY);
+    location.reload();
+  }
+}
 
 // ============ CLOUD FUNCTIONS ============
 async function performCloudSave(){
@@ -990,6 +1050,25 @@ document.addEventListener('keydown',ev=>{
   }
 });
 document.addEventListener('keyup',ev=>{ if(ev.key===' '){ spaceHeld=false; if(tool!=='pan')svg.classList.remove('tool-pan'); } });
+
+// ============ AUTO-LOAD ON PAGE LOAD ============
+window.addEventListener('DOMContentLoaded', () => {
+  // Cố load từ localStorage
+  const loaded = loadFromLocalStorage();
+  if(loaded) {
+    console.log('✅ Loaded from LocalStorage');
+  } else {
+    console.log('No LocalStorage data found, using default');
+  }
+});
+
+// Auto-save khi undo/redo hoặc thay đổi
+document.addEventListener('keydown', ev => {
+  if((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's' && !ev.shiftKey) {
+    saveToLocalStorage();
+    ev.preventDefault();
+  }
+});
 
 function toggleGrid(){ showGrid=!showGrid; $('gridBtn').classList.toggle('active',showGrid); render(); }
 function toggleSnap(){ S.meta.snap=!S.meta.snap; $('snapBtn').classList.toggle('active',S.meta.snap); }
